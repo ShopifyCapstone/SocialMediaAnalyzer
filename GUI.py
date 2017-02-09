@@ -4,12 +4,10 @@ import tkinter.font as tkFont
 import tkinter.ttk as ttk
 from tkinter.ttk import Combobox,Treeview,Scrollbar
 from keyphrase_extractor import get_keyphrases
-
 import pandas
-
 from searcher import search
-
 import webbrowser
+
 
 ###Create Table
 class TableApp(Frame):
