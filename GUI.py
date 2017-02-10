@@ -234,7 +234,7 @@ class App(tkinter.Tk):
     def OnButtonClick(self):
         print("OnButtonClick")
         searchResults = search(self.masterDF, self.entryVariable.get())
-        print(searchResults)
+        print('## searchResults', searchResults)
         self.currentDF = get_keyphrases(". ".join(searchResults["body"].tolist()))
         self.RB1.configure(state="normal")
         self.RB2.configure(state="normal")
@@ -251,7 +251,7 @@ class App(tkinter.Tk):
     def OnPressEnter(self, event):
         print("OnPressEnter")
         self.currentDF = search(self.masterDF, self.entryVariable.get())
-        print(self.currentDF)
+        print('## currentDF',self.currentDF)
         self.RB1.configure(state="normal")
         self.RB2.configure(state="normal")
         self.RB3.configure(state="normal")
