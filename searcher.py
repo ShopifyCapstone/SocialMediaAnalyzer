@@ -117,3 +117,4 @@ if __name__ == "__main__":
     searcher.create_index()
     searcher.fill_index(masterDF.head(1000))
     resultsDF = searcher.search_keywords(terms='capital')
+    print('## resultsDF', resultsDF)
