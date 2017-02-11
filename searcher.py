@@ -32,8 +32,7 @@ class CustomFilter(Filter):
 
 
 def search(df, userQuery):
-    # Defining constants for the data paths ***** MODIFY ACCORDINGLY *****
-    INDEX_DIR = "C:/UofT/4th_year/Capstone/Python_directory/schema"
+    INDEX_DIR = "index/"
 
     # BUILD SCHEMA ****
     # schema has fields - piece of info for each doc in the index

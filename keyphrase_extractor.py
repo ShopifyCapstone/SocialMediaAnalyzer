@@ -7,10 +7,12 @@ import pandas
 
 from collections import Counter
 
-nltk.download('punkt',quiet='true')
-nltk.download("averaged_perceptron_tagger",quiet='true')
-nltk.download("wordnet",quiet='true')
-nltk.download("brown",quiet='true')
+nltk.download('punkt')
+nltk.download("averaged_perceptron_tagger")
+nltk.download("wordnet")
+nltk.download("brown")
+nltk.download("stopwords")
+
 
 def get_keyphrases(textInput, k=15, version='Summary'):
     # version = Summary or version = PMI

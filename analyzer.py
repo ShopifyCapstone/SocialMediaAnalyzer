@@ -1,11 +1,14 @@
 from GUI import App
 from data_handler import read_comments
 import pandas
+import sys
 
-import pandas
+from keyphrase_extractor import get_keyphrases
+from searcher import search
 
 # load comments df
 masterDF = pandas.read_pickle('commentDF.pkl')
+masterDF = masterDF.head(100)
 #masterDF = read_comments()
 '''
 masterDF = pandas.DataFrame(columns=['name','subreddit', 'body', 'link'],index=[0,1,2,3,4,5])
@@ -17,8 +20,17 @@ masterDF.loc[4] = pandas.Series({'body':"Terrible prices", 'name':'-1', 'subredd
 masterDF.loc[5] = pandas.Series({'body':"Disastrous prices", 'name':'-1', 'subreddit':'-1', 'link':'http://google.com'})
 '''
 
-# load submissions df
 
-root = App(masterDF.head(1000))
-root.title('Shopify Reddit Analyzer')
-root.mainloop()
+if len(sys.argv)==1 :
+	root = App(masterDF)
+	root.title('Shopify Reddit Analyzer')
+	root.mainloop()
+elif len(sys.argv)==2:
+	search_terms = sys.argv[1]
+	search_results_df = search(masterDF, search_terms)
+	print('## search_results_df',search_results_df)
+	key_phrases_df = get_keyphrases(". ".join(search_results_df["body"].tolist()))
+	print('## key_phrases_df',key_phrases_df)
+else:
+	raise("There shouldn't be more than 1 arg. Usage: python analyzer.py ['some terms']")
+
