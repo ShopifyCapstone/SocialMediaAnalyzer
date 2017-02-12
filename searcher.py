@@ -1,5 +1,6 @@
 from whoosh.analysis import Filter
 from whoosh import index as Index
+from whoosh.index import open_dir
 from whoosh import writing
 from whoosh.fields import Schema, TEXT, ID, STORED
 from whoosh.analysis import RegexTokenizer, LowercaseFilter, StopFilter, StemFilter
@@ -58,20 +59,28 @@ class Whoosher:
         self.ix = Index.create_in(self.path, schema)
 
     def fill_index(self, df):
+        df['successfully indexed'] = True
         with writing.BufferedWriter(self.ix, period=20, limit=1000) as writer :
-            for row in df.iterrows():
-                index, data = row
-                writer.add_document(comment_ID=data['name'],
-                                    comment_Subreddit=data['subreddit'],
-                                    comment_Content=data['body'],
-                                    comment_Content_raw=data['body'],
-                                    )
+            for index, data in df.iterrows():
+                try:
+                    writer.add_document(comment_ID=data['name'],
+                                        comment_Subreddit=data['subreddit'],
+                                        comment_Content=data['body'],
+                                        comment_Content_raw=data['body'],
+                                        )
+                except:
+                    print("Couldn't index document in Whoosh",index, len(data['body']), data['body'])
+                    df.iloc['successfully indexed', index] = False
+
+        print('{} documents could not be indexed out of {}. Not an issue if small %.'.format(len(df[df['successfully indexed']==False]), len(df)))
 
     def open_index(self):
         try:
             self.ix = open_dir(self.path)
+            return True
         except:
-            raise "No whoosh data in {}".format(self.path)
+            print("No whoosh data in {}".format(self.path))
+            return False
 
     def search_keywords(self, user_query, ranking_function=scoring.BM25F()):
 
@@ -121,4 +130,9 @@ if __name__ == "__main__":
     whoosher.create_index()
     whoosher.fill_index(masterDF.head(1000))
     resultsDF = whoosher.search_keywords(user_query='capital')
+    print('# resultsDF', resultsDF)
+
+    other_whoosher = Whoosher("index_test")
+    other_whoosher.open_index()
+    resultsDF = other_whoosher.search_keywords(user_query='capital')
     print('# resultsDF', resultsDF)
