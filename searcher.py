@@ -117,7 +117,7 @@ class Whoosher:
 
 def search(df, userQuery):
     """kept here for compatibility but this function will have to be removed."""
-    whoosher = Whoosher("index_test")
+    whoosher = Whoosher()
     whoosher.create_index()
     whoosher.fill_index(df)
     return whoosher.search_keywords(userQuery)
