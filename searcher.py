@@ -68,9 +68,13 @@ class WhooshInterfacer:
                                     )
 
     def open_index(self):
-        self.ix = open_dir(self.path)
+        try:
+            self.ix = open_dir(self.path)
+        except:
+            raise "No whoosh data in {}".format(self.path)
 
     def search_keywords(self, user_query, ranking_function=scoring.BM25F()):
+
         qp = QueryParser("comment_Content", schema=self.ix.schema)
 
         # Once you have a QueryParser object, you can call parse() on it to parse a query string into a query object:
@@ -85,14 +89,14 @@ class WhooshInterfacer:
         # qp.remove_plugin_class(qparser.PhrasePlugin)
         qp.add_plugin(qparser.PhrasePlugin)
         query = qp.parse(userQuery)
-        print("##Query: ")
+        print("# user_query", user_query, ", Query: ", query)
         print(query)
 
         with self.ix.searcher(weighting=ranking_function) as searcher:
-            user_query = searcher.search(query, limit=None)
-            print("Total Number of Results:", len(user_query))
-            print("Number of scored and sorted docs in this Results object:", user_query.scored_length())
-            results = [item.fields() for item in user_query]
+            matches = searcher.search(query, limit=None)
+            print("Total Number of Results:", len(matches))
+            print("Number of scored and sorted docs in this Results object:", matches.scored_length())
+            results = [item.fields() for item in matches]
 
         resultsDF = pandas.DataFrame.from_dict(results)
         resultsDF = resultsDF.rename(columns={'comment_ID': 'name', 
@@ -117,4 +121,4 @@ if __name__ == "__main__":
     searcher.create_index()
     searcher.fill_index(masterDF.head(1000))
     resultsDF = searcher.search_keywords(terms='capital')
-    print('## resultsDF', resultsDF)
+    print('# resultsDF', resultsDF)
