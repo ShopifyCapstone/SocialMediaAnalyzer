@@ -32,7 +32,7 @@ class CustomFilter(Filter):
                 yield t
 
 
-class WhooshInterfacer:
+class Whoosher:
 
     def __init__(self, path="index/"):
         self.path=path
@@ -88,7 +88,7 @@ class WhooshInterfacer:
         qp.add_plugin(qparser.GtLtPlugin)
         # qp.remove_plugin_class(qparser.PhrasePlugin)
         qp.add_plugin(qparser.PhrasePlugin)
-        query = qp.parse(userQuery)
+        query = qp.parse(user_query)
         print("# user_query", user_query, ", Query: ", query)
         print(query)
 
@@ -108,17 +108,17 @@ class WhooshInterfacer:
 
 def search(df, userQuery):
     """kept here for compatibility but this function will have to be removed."""
-    searcher = WhooshInterfacer("index_test")
-    searcher.create_index()
-    searcher.fill_index(df)
-    return searcher.search_keywords(userQuery)
+    whoosher = Whoosher("index_test")
+    whoosher.create_index()
+    whoosher.fill_index(df)
+    return whoosher.search_keywords(userQuery)
 
 
 if __name__ == "__main__":
     import pandas
     masterDF = pandas.read_pickle('commentDF.pkl')
-    searcher = WhooshInterfacer("index_test")
-    searcher.create_index()
-    searcher.fill_index(masterDF.head(1000))
-    resultsDF = searcher.search_keywords(terms='capital')
+    whoosher = Whoosher("index_test")
+    whoosher.create_index()
+    whoosher.fill_index(masterDF.head(1000))
+    resultsDF = whoosher.search_keywords(user_query='capital')
     print('# resultsDF', resultsDF)
