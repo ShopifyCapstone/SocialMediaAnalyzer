@@ -1,5 +1,6 @@
 from whoosh.analysis import Filter
 from whoosh import index as Index
+from whoosh.index import open_dir
 from whoosh import writing
 from whoosh.fields import Schema, TEXT, ID, STORED
 from whoosh.analysis import RegexTokenizer, LowercaseFilter, StopFilter, StemFilter
@@ -10,6 +11,7 @@ import os, os.path  # os - portable way of using operating system dependent func
 import shutil  # High-level file operations
 import pandas
 import nltk
+
 
 class CustomFilter(Filter):
     # This filter will run for both the index and the query
@@ -31,97 +33,106 @@ class CustomFilter(Filter):
                 yield t
 
 
-def search(df, userQuery):
-    INDEX_DIR = "index/"
+class Whoosher:
 
-    # BUILD SCHEMA ****
-    # schema has fields - piece of info for each doc in the index
-    customWordFilter = RegexTokenizer() | LowercaseFilter() | CustomFilter(
-        nltk.stem.porter.PorterStemmer().stem) | CustomFilter(nltk.WordNetLemmatizer().lemmatize)
+    def __init__(self, path="index/"):
+        self.path=path
 
-    ixSchema = Schema(comment_ID=ID(stored=True),
+    def set_schema(self):
+        customWordFilter = RegexTokenizer() | \
+                           LowercaseFilter() | \
+                           CustomFilter(nltk.stem.porter.PorterStemmer().stem) | \
+                           CustomFilter(nltk.WordNetLemmatizer().lemmatize)
+
+        return Schema(comment_ID=ID(stored=True),
                       comment_Subreddit=ID(stored=True),
-                      # note analyzer is a wrapper for a tokenizer and zero or more filters -- i.e. allows you to combine them
-                      comment_Content=TEXT(analyzer=customWordFilter))
+                      comment_Content=TEXT(analyzer=customWordFilter),
+                      comment_Content_raw=STORED,
+                      )
 
-    # BUILD INDEX ****
+    def create_index(self):
+        schema = self.set_schema()
+
+        if not os.path.exists(self.path):
+            os.mkdir(self.path)
+
+        self.ix = Index.create_in(self.path, schema)
+
+    def fill_index(self, df):
+        df['successfully indexed'] = True
+        with writing.BufferedWriter(self.ix, period=20, limit=1000) as writer :
+            for index, data in df.iterrows():
+                try:
+                    writer.add_document(comment_ID=data['name'],
+                                        comment_Subreddit=data['subreddit'],
+                                        comment_Content=data['body'],
+                                        comment_Content_raw=data['body'],
+                                        )
+                except:
+                    print("Couldn't index document in Whoosh",index, len(data['body']), data['body'])
+                    df.iloc['successfully indexed', index] = False
+
+        print('{} documents could not be indexed out of {}. Not an issue if small %.'.format(len(df[df['successfully indexed']==False]), len(df)))
+
+    def open_index(self):
+        try:
+            self.ix = open_dir(self.path)
+            return True
+        except:
+            print("No whoosh data in {}".format(self.path))
+            return False
+
+    def search_keywords(self, user_query, ranking_function=scoring.BM25F()):
+
+        qp = QueryParser("comment_Content", schema=self.ix.schema)
+
+        # Once you have a QueryParser object, you can call parse() on it to parse a query string into a query object:
+        # default query lang:
+        # If the user doesn’t explicitly specify AND or OR clauses:
+        # by default, the parser treats the words as if they were connected by AND,
+        # meaning all the terms must be present for a document to match
+        # we will change this
+        # to phrase search "<query>" - use quotes
+
+        qp.add_plugin(qparser.GtLtPlugin)
+        # qp.remove_plugin_class(qparser.PhrasePlugin)
+        qp.add_plugin(qparser.PhrasePlugin)
+        query = qp.parse(user_query)
+        print("# user_query", user_query, ", Query: ", query)
+        print(query)
+
+        with self.ix.searcher(weighting=ranking_function) as searcher:
+            matches = searcher.search(query, limit=None)
+            print("Total Number of Results:", len(matches))
+            print("Number of scored and sorted docs in this Results object:", matches.scored_length())
+            results = [item.fields() for item in matches]
+
+        resultsDF = pandas.DataFrame.from_dict(results)
+        resultsDF = resultsDF.rename(columns={'comment_ID': 'name', 
+                                              'comment_Subreddit': 'subreddit',
+                                              'comment_Content_raw': 'body',
+                                              })
+        return resultsDF
 
 
-    if not os.path.exists(INDEX_DIR):
-        os.mkdir(INDEX_DIR)
-
-    # if index exists - remove it
-    #     #Return True if path is an existing directory.
-    #     if os.path.isdir(INDEX_DIR):
-    #         #Delete an entire directory tree; path must point to a directory
-    #         shutil.rmtree(INDEX_DIR)
-    #     #create the directory for the index
-    #     os.makedirs(INDEX_DIR)
-
-    # initiate index - takes two inputs, the index directory and the schema for the index
-    ix = Index.create_in(INDEX_DIR, ixSchema)
-
-    # INDEX COMMENTS ****
-    # creating a utility writer
-    # params: index – the whoosh.index.Index to write to.
-    # period – the maximum amount of time (in seconds) between commits.
-    # limit – the maximum number of documents to buffer before committing/between commits.
-    writer = writing.BufferedWriter(ix, period=20, limit=1000)
-    try:
-        # write each file to index
-        # enumerate returns index,value index points too --> index,a[index]
-
-        counter1 = 0
-        for row in df.iterrows():
-            index, data = row
-            writer.add_document(comment_ID=data['name'],
-                                comment_Subreddit=data['subreddit'],
-                                comment_Content=data['body'])
-            counter1 = counter1 + 1
-
-            #             if (counter1 % 100 == 0):
-            #                 print("already indexed:", counter1+1)
-
-    finally:
-        # save the index
-        # print("done indexing")
-        # *** Note *** -> Must explictly call close() on the writer object to release the write lock and makesure uncommited changes are saved
-        writer.close()
+def search(df, userQuery):
+    """kept here for compatibility but this function will have to be removed."""
+    whoosher = Whoosher()
+    whoosher.create_index()
+    whoosher.fill_index(df)
+    return whoosher.search_keywords(userQuery)
 
 
-        # PARSE USER QUERY ****
+if __name__ == "__main__":
+    import pandas
+    masterDF = pandas.read_pickle('commentDF.pkl')
+    whoosher = Whoosher("index_test")
+    whoosher.create_index()
+    whoosher.fill_index(masterDF.head(1000))
+    resultsDF = whoosher.search_keywords(user_query='capital')
+    print('# resultsDF', resultsDF)
 
-    # in the query parser --> we pass the DEFAULT field to search and the schema of the index we are searching
-    # NOTE: Users can still specify a search on a different field in the schema via --> <fieldname>: <query>
-    qp = QueryParser("comment_Content", schema=ix.schema)
-
-    # Once you have a QueryParser object, you can call parse() on it to parse a query string into a query object:
-    # default query lang:
-    # If the user doesn’t explicitly specify AND or OR clauses:
-    # by default, the parser treats the words as if they were connected by AND,
-    # meaning all the terms must be present for a document to match
-    # we will change this
-    # to phrase search "<query>" - use quotes
-
-    qp.add_plugin(qparser.GtLtPlugin)
-    # qp.remove_plugin_class(qparser.PhrasePlugin)
-    qp.add_plugin(qparser.PhrasePlugin)
-    query = qp.parse(userQuery)
-    print("\n\n Query: ")
-    print(query)
-    print("\n\n")
-
-    ##IMPLEMENT SEARCHER ****
-    resultsDF = pandas.DataFrame()  # creates a new dataframe that's empty to store the results comment content
-    with ix.searcher(weighting=scoring.BM25F()) as searcher:
-        queryResults = searcher.search(query, limit=None)
-        print("Total Number of Results:", len(queryResults))
-        print("Number of scored and sorted docs in this Results object:", queryResults.scored_length())
-        for result in queryResults:
-            #             print(result)
-            #             print("\n",result['comment_ID'])
-            resultsDF = resultsDF.append(df.loc[df['name'] == result['comment_ID']][['name', 'subreddit', 'body']])
-
-    # print(dataDf.loc[dataDf['body']==comment].index.values[0])
-
-    return resultsDF
+    other_whoosher = Whoosher("index_test")
+    other_whoosher.open_index()
+    resultsDF = other_whoosher.search_keywords(user_query='capital')
+    print('# resultsDF', resultsDF)
