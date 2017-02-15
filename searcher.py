@@ -19,22 +19,16 @@ class Whoosher:
         self.path=path
 
     def set_schema(self, df_schema):
+        """ Whoosh schema = all df_schema fields, stored but not indexed, 
+            + extra field 'body_processed', processed, indexed."""
         customWordFilter = RegexTokenizer() | \
                            LowercaseFilter() | \
                            CustomFilter(nltk.stem.porter.PorterStemmer().stem) | \
                            CustomFilter(nltk.WordNetLemmatizer().lemmatize)
 
-        # cols = df.columns
         whoosh_schema = {item:STORED for item in df_schema}
         whoosh_schema.update({'body_processed':TEXT(analyzer=customWordFilter)})
-        # import ipdb; ipdb.set_trace()
-
-
-        # return Schema(comment_ID=ID(stored=True),
-        #               comment_Subreddit=ID(stored=True),
-        #               comment_Content=TEXT(analyzer=customWordFilter),
-        #               comment_Content_raw=STORED,
-        #               )
+        print('Whoosh_schema', whoosh_schema)
         return Schema(**whoosh_schema)
 
     def create_index(self, df_schema):
@@ -50,16 +44,8 @@ class Whoosher:
         with writing.BufferedWriter(self.ix, period=20, limit=1000) as writer :
             for index, row in df.iterrows():
                 row_dict = row.to_dict()
-                # import ipdb; ipdb.set_trace()
-
                 row_dict.update({'body_processed':row['body']})
                 try:
-                    # writer.add_document(comment_ID=data['name'],
-                    #                     comment_Subreddit=data['subreddit'],
-                    #                     comment_Content=data['body'],
-                    #                     comment_Content_raw=data['body'],
-                    #                     )
-
                     writer.add_document(**row_dict)
                 except:
                     print("Couldn't index document in Whoosh",index, len(row['body']), row['body'])
@@ -77,7 +63,6 @@ class Whoosher:
 
     def search_keywords(self, user_query, ranking_function=scoring.BM25F()):
 
-        # qp = QueryParser("comment_Content", schema=self.ix.schema)
         qp = QueryParser("body_processed", schema=self.ix.schema)
 
         # Once you have a QueryParser object, you can call parse() on it to parse a query string into a query object:
@@ -102,10 +87,6 @@ class Whoosher:
             results = [item.fields() for item in matches]
 
         resultsDF = pandas.DataFrame.from_dict(results)
-        # resultsDF = resultsDF.rename(columns={'comment_ID': 'name', 
-        #                                       'comment_Subreddit': 'subreddit',
-        #                                       'comment_Content_raw': 'body',
-        #                                       })
         return resultsDF
 
 
@@ -127,14 +108,6 @@ class CustomFilter(Filter):
             else: # == 'index' if called by indexer
                 t.text = self.customFilter(t.text, *self.args, **self.kwargs)
                 yield t
-
-
-def search(df, userQuery):
-    """kept here for compatibility but this function will have to be removed."""
-    whoosher = Whoosher()
-    whoosher.create_index()
-    whoosher.fill_index(df)
-    return whoosher.search_keywords(userQuery)
 
 
 if __name__ == "__main__":
