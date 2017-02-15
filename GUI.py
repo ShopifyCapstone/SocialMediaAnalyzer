@@ -5,7 +5,6 @@ import tkinter.ttk as ttk
 from tkinter.ttk import Combobox,Treeview,Scrollbar
 from keyphrase_extractor import get_keyphrases
 import pandas
-from searcher import search
 import webbrowser
 
 
@@ -122,9 +121,9 @@ class TimelineApp(Frame):
 ###Main Application
 class App(tkinter.Tk):
     ###Initialize things
-    def __init__(self, masterDF):
+    def __init__(self, whoosher):
         tkinter.Tk.__init__(self)
-        self.masterDF = masterDF
+        self.whoosher = whoosher
         self.initialize()
 
     ###Actually initialize the program
@@ -233,9 +232,10 @@ class App(tkinter.Tk):
     ###Click Submit Button and show all search
     def OnButtonClick(self):
         print("OnButtonClick")
-        searchResults = search(self.masterDF, self.entryVariable.get())
-        print('## searchResults', searchResults)
-        self.currentDF = get_keyphrases(". ".join(searchResults["body"].tolist()))
+        user_query = self.entryVariable.get()
+        search_results_df = self.whoosher.search_keywords(user_query)
+        print('# search_results_df', search_results_df)
+        self.currentDF = get_keyphrases(". ".join(search_results_df["body"].tolist()))
         self.RB1.configure(state="normal")
         self.RB2.configure(state="normal")
         self.RB3.configure(state="normal")
@@ -249,9 +249,11 @@ class App(tkinter.Tk):
 
     ###Click Enter and show all search
     def OnPressEnter(self, event):
+        # TODO: broken, to be fixed.
         print("OnPressEnter")
-        self.currentDF = search(self.masterDF, self.entryVariable.get())
-        print('## currentDF',self.currentDF)
+        user_query = self.entryVariable.get()
+        self.currentDF = self.whoosher.search_keywords(user_query)
+        print('# currentDF',self.currentDF)
         self.RB1.configure(state="normal")
         self.RB2.configure(state="normal")
         self.RB3.configure(state="normal")
