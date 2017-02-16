@@ -10,15 +10,17 @@ import webbrowser
 
 ###Create Table
 class TableApp(Frame):
-    def __init__(self, parent, keyphraseDF):
+    def __init__(self, parent, keyphraseDF=pandas.DataFrame({'Term' : []}),commentsDF=pandas.DataFrame({'a' : [1]})):
         Frame.__init__(self, parent)
         self.loadTable(keyphraseDF)
+        self.commentsDF = commentsDF
         self.grid(sticky=(N, S, W, E))
         parent.grid_rowconfigure(0, weight=1)
         parent.grid_columnconfigure(0, weight=1)
 
     ###Get Table Values
     def loadTable(self, keyphraseDF):
+        # TODO: make reusable for various df's
         self.keyphraseDF = keyphraseDF
         tv = Treeview(self)
         #tv['columns'] = ('pointwisemutual', 'mutual', 'viewfull')
@@ -38,7 +40,7 @@ class TableApp(Frame):
         self.grid_columnconfigure(0, weight=1)
 
         for (i, row) in self.keyphraseDF.iterrows():
-            self.treeview.insert('', 'end', text=row["Term"])
+            self.treeview.insert('', 'end', text=row["Keyphrase"])
             #self.treeview.insert('', 'end', text=row["body"], values=(row["name"], row["subreddit"], 'View'))
 
         self.treeview.bind("<Button-1>", self.onClick)
@@ -47,14 +49,17 @@ class TableApp(Frame):
     def onClick(self, event):
         # change to the highlighted view
         item = self.treeview.identify('item', event.x, event.y)
-        body = self.treeview.item(item, "text")
-        print("you clicked on", body)
-        link = self.keyphraseDF[self.keyphraseDF['body'] == body]["link"].tolist()[0]
+        keyphrase = self.treeview.item(item, "text")
+        print("you clicked on", keyphrase)
+        #link = self.keyphraseDF[self.keyphraseDF['body'] == body]["link"].tolist()[0]
 
         child = tkinter.Toplevel(self)
         t_child = Text(child)
         t_child.pack()
-        t_child.insert(END, body + '\n')
+        print(keyphrase)
+        t_child.delete(1.0, END)
+        for comment in self.commentsDF[self.commentsDF[keyphrase]==1]['body'].values.tolist():
+            t_child.insert(END, comment + '\n-----------------\n')
         #call second window
         #webbrowser.open(link)
 
@@ -219,7 +224,7 @@ class App(tkinter.Tk):
         #showallcomments.grid(row=0, column=7)
 
         ###fourthframe = Table
-        self.table = TableApp(self.fourthframe, pandas.DataFrame({'Term' : []}))
+        self.table = TableApp(self.fourthframe)
 
         ###fifth frame = Timeline Header
         #timelinehead = Label(fifthframe, text="Comment Frequency Timeline", bg="yellowgreen")
@@ -235,7 +240,8 @@ class App(tkinter.Tk):
         user_query = self.entryVariable.get()
         search_results_df = self.whoosher.search_keywords(user_query)
         print('# search_results_df', search_results_df)
-        self.currentDF = get_keyphrases(". ".join(search_results_df["body"].tolist()))
+        keyphrases = get_keyphrases(". ".join(search_results_df["body"].tolist()))['Term'].tolist()
+        self.currentDF, self.totalDF = self.whoosher.get_MIs(keyphrases)
         self.RB1.configure(state="normal")
         self.RB2.configure(state="normal")
         self.RB3.configure(state="normal")
@@ -243,7 +249,7 @@ class App(tkinter.Tk):
         self.fourthframe.destroy()
         self.fourthframe = Frame(self, bg='lavender', width=1000, height=100, padx=3, pady=3)
         self.fourthframe.grid(row=4, sticky="ew")
-        TableApp(self.fourthframe, self.currentDF)
+        TableApp(self.fourthframe, self.currentDF, self.totalDF)
 
     ###summary statistics
 

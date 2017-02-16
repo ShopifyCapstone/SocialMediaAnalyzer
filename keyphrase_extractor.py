@@ -116,3 +116,35 @@ def get_keyphrases(textInput, k=15, version='Summary'):
 
     elif version.lower() == 'pmi':
         return counter.most_common(k);
+
+    def MI_scorer(df, keyphrase_list):
+        import sklearn.metrics
+
+        # Find out if a particular review has the word from topk list
+        freqReview = []
+        for i in range(len(reviewDf)):
+            tempCounter = Counter([word.lower() for word in re.findall(r'\w+', reviewDf['reviewColumn'][i])])
+            topkinReview = [1 if tempCounter[word] > 0 else 0 for (word, wordCount) in topk]
+            freqReview.append(topkinReview)
+
+        # Prepare freqReviewDf
+        freqReviewDf = pandas.DataFrame(freqReview)
+        dfName = []
+        for c in topk:
+            dfName.append(c[0])
+        freqReviewDf.columns = dfName
+        finalDf = vaderSentimentDf.join(freqReviewDf)
+
+        gtVaderScore = []
+        miScore = []
+
+        for i in range(len(finalDf)):
+            if finalDf['vader'][i] > 0:
+                gtVaderScore.append(1)
+            else:
+                gtVaderScore.append(0)
+
+        for word in topk[:50]:
+            miScore.append([word[0]] + [sklearn.metrics.mutual_info_score(gtVaderScore, finalDf[word].as_matrix())])
+        miScoredf = pandas.DataFrame(miScore)
+        miScoredf.columns = ['Term', 'MI Score Vader']

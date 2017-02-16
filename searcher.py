@@ -11,12 +11,14 @@ import os, os.path  # os - portable way of using operating system dependent func
 import shutil  # High-level file operations
 import pandas
 import nltk
-
+import numpy
+import sklearn
 
 class Whoosher:
 
-    def __init__(self, path="index/"):
+    def __init__(self, df, path="index/"):
         self.path=path
+        self.df = df
 
     def set_schema(self, df_schema):
         """ Whoosh schema = all df_schema fields, stored but not indexed, 
@@ -27,7 +29,7 @@ class Whoosher:
                            CustomFilter(nltk.WordNetLemmatizer().lemmatize)
 
         whoosh_schema = {item:STORED for item in df_schema}
-        whoosh_schema.update({'body_processed':TEXT(analyzer=customWordFilter)})
+        whoosh_schema.update({'body':TEXT(stored=True, analyzer=customWordFilter)})
         print('Whoosh_schema', whoosh_schema)
         return Schema(**whoosh_schema)
 
@@ -44,7 +46,7 @@ class Whoosher:
         with writing.BufferedWriter(self.ix, period=20, limit=1000) as writer :
             for index, row in df.iterrows():
                 row_dict = row.to_dict()
-                row_dict.update({'body_processed':row['body']})
+                #row_dict.update({'body_processed':row['body']})
                 try:
                     writer.add_document(**row_dict)
                 except:
@@ -63,7 +65,7 @@ class Whoosher:
 
     def search_keywords(self, user_query, ranking_function=scoring.BM25F()):
 
-        qp = QueryParser("body_processed", schema=self.ix.schema)
+        qp = QueryParser("body", schema=self.ix.schema)
 
         # Once you have a QueryParser object, you can call parse() on it to parse a query string into a query object:
         # default query lang:
@@ -89,6 +91,61 @@ class Whoosher:
         resultsDF = pandas.DataFrame.from_dict(results)
         return resultsDF
 
+    def search_keyphrase(self, keyphrase, ranking_function=scoring.BM25F()):
+        # TODO: address the df situation (potentially introduce a self.field)
+        # TODO: potentially do all qp statements at initiation???
+        qp = QueryParser("body", schema=self.ix.schema)
+        qp.add_plugin(qparser.GtLtPlugin)
+        qp.add_plugin(qparser.PhrasePlugin)
+        query = qp.parse('"' + keyphrase + '"')
+        print("# Keyphrase", keyphrase, ", Query: ", query)
+        print(query)
+        with self.ix.searcher(weighting=ranking_function) as searcher:
+            matches = searcher.search(query, limit=None)
+            #results = [item.fields() for item in matches]
+            docs = matches.docs()
+        return docs
+
+    def get_MIs(self, keyphrases):
+        # TODO: address the df situation (potentially introduce a self.field)
+        # TODO: potentially add another function so that this one would only return a 1,0 table
+        docs = []
+        for keyphrase in keyphrases:
+            docs.append(self.search_keyphrase(keyphrase=keyphrase))
+        print(docs)
+
+        docsDF = pandas.DataFrame(numpy.zeros(shape=(len(self.df), len(keyphrases)), dtype=numpy.int8))
+        docsDF.columns = keyphrases
+
+        for keyphrase_no in range(0, len(keyphrases)):
+            for doc in docs[keyphrase_no]:
+                docsDF.loc[doc,keyphrases[keyphrase_no]] = 1
+
+        #finalDF = df[['sentiment_score']].join(docsDF)
+        #print(finalDF.head(5))
+
+        vaderScores = []
+        for i in range(len(self.df)):
+            if int(self.df['sentiment_score'][i][0]) > 0:
+                vaderScores.append(1)
+            else:
+                vaderScores.append(0)
+
+        miScore = []
+        for keyphrase in keyphrases:
+            miScore.append([keyphrase] + [sklearn.metrics.mutual_info_score(vaderScores, docsDF[keyphrase].as_matrix())])
+        miDF = pandas.DataFrame(miScore)
+        miDF.columns = ['Keyphrase', 'MI']
+        miDF = miDF.sort_values(by="MI", axis=0, ascending=False)
+        print(miDF)
+
+        return miDF, self.df.join(docsDF)
+
+    def highlighter(self, keyphrase, text):
+        keyphrase.split
+
+
+
 
 class CustomFilter(Filter):
     # This filter will run for both the index and the query
@@ -113,12 +170,14 @@ class CustomFilter(Filter):
 if __name__ == "__main__":
     # build index from scratch ('commentDF.pkl') and search
     import pandas
-    masterDF = pandas.read_pickle('commentDF.pkl')
+    masterDF = pandas.read_pickle('commentDF.pkl').head(1000)
     whoosher = Whoosher("index_test")
     whoosher.create_index(masterDF.columns)
-    whoosher.fill_index(masterDF.head(1000))
+    whoosher.fill_index(masterDF)
     resultsDF = whoosher.search_keywords(user_query='capital')
     print('# resultsDF', resultsDF)
+    for table in whoosher.get_MIs(keyphrases=['bad', 'good'], df=masterDF):
+        print(table)
 
     # search existing index
     other_whoosher = Whoosher("index_test")
