@@ -14,15 +14,23 @@ def read_json_as_pandas(file_in):
 def add_sentiment(df):
     sid = SentimentIntensityAnalyzer()
     scores = []
+    sentiments = []
     for index, row in df.iterrows():
         ss = sid.polarity_scores(row['body'])
-        scores.append([ss['compound']])
+        score = ss['compound']
+        if score > 0:
+            sentiments.append('positive')
+        else:
+            sentiments.append('negative')
+        scores.append(score)
         if (index % 1000 == 1):
             print("processed %d comments" % (index+1))
     scores = pandas.Series(scores)
+    sentiments = pandas.Series(sentiments)
     df['sentiment_score'] = scores
+    df['sentiment_class'] = sentiments
 
-def read_comments(dir='data/'):
+def read_comments(pickle_name, dir='data/'):
 
     print('read_comments')
     files = os.listdir(dir)
@@ -44,4 +52,7 @@ def read_comments(dir='data/'):
     add_sentiment(commentDF)
 
     #return commentDF
-    commentDF.to_pickle('commentDF.pkl')
+    commentDF.to_pickle(pickle_name)
+
+if __name__ == "__main__":
+    read_comments(dir='data_old/', pickle_name='commentDF_old.pkl')

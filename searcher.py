@@ -9,16 +9,14 @@ from whoosh.qparser import QueryParser, GtLtPlugin, PhrasePlugin, SequencePlugin
 from whoosh import scoring
 import os, os.path  # os - portable way of using operating system dependent functionality
 import shutil  # High-level file operations
-import pandas
 import nltk
-import numpy
-import sklearn
+import pandas
+
 
 class Whoosher:
 
-    def __init__(self, df, path="index/"):
+    def __init__(self, path="index/"):
         self.path=path
-        self.df = df
 
     def set_schema(self, df_schema):
         """ Whoosh schema = all df_schema fields, stored but not indexed, 
@@ -52,19 +50,29 @@ class Whoosher:
                 except:
                     print("Couldn't index document in Whoosh",index, len(row['body']), row['body'])
                     ii += 1
+                if index % 10000 == 0:
+                    print("Went through {} document(s)".format(index+1))
 
         print('{} documents could not be indexed out of {}. Not an issue if small %.'.format(ii, len(df)))
+        self.load_to_pandas()
 
     def open_index(self):
         try:
             self.ix = open_dir(self.path)
+            self.load_to_pandas()
+            print("Index loaded succesfully")
             return True
         except:
             print("No whoosh data in {}".format(self.path))
             return False
 
-    def search_keywords(self, user_query, ranking_function=scoring.BM25F()):
+    def load_to_pandas(self):
+        docs = []
+        for doc in self.ix.searcher().documents():
+            docs.append(doc)
+        self.masterDF = pandas.DataFrame.from_dict(docs)
 
+    def search(self, user_query, ranking_function=scoring.BM25F(), phraseSearch=False, keyphraseSearch=False):
         qp = QueryParser("body", schema=self.ix.schema)
 
         # Once you have a QueryParser object, you can call parse() on it to parse a query string into a query object:
@@ -78,6 +86,10 @@ class Whoosher:
         qp.add_plugin(qparser.GtLtPlugin)
         # qp.remove_plugin_class(qparser.PhrasePlugin)
         qp.add_plugin(qparser.PhrasePlugin)
+
+        if phraseSearch == True:
+            user_query = '"'+user_query+'"'
+
         query = qp.parse(user_query)
         print("# user_query", user_query, ", Query: ", query)
         print(query)
@@ -88,8 +100,11 @@ class Whoosher:
             print("Number of scored and sorted docs in this Results object:", matches.scored_length())
             results = [item.fields() for item in matches]
 
-        resultsDF = pandas.DataFrame.from_dict(results)
-        return resultsDF
+        if keyphraseSearch == True:
+            return matches.docs()
+        else:
+            resultsDF = pandas.DataFrame.from_dict(results)
+            return resultsDF
 
     def search_keyphrase(self, keyphrase, ranking_function=scoring.BM25F()):
         # TODO: address the df situation (potentially introduce a self.field)
@@ -105,47 +120,6 @@ class Whoosher:
             #results = [item.fields() for item in matches]
             docs = matches.docs()
         return docs
-
-    def get_MIs(self, keyphrases):
-        # TODO: address the df situation (potentially introduce a self.field)
-        # TODO: potentially add another function so that this one would only return a 1,0 table
-        docs = []
-        for keyphrase in keyphrases:
-            docs.append(self.search_keyphrase(keyphrase=keyphrase))
-        print(docs)
-
-        docsDF = pandas.DataFrame(numpy.zeros(shape=(len(self.df), len(keyphrases)), dtype=numpy.int8))
-        docsDF.columns = keyphrases
-
-        for keyphrase_no in range(0, len(keyphrases)):
-            for doc in docs[keyphrase_no]:
-                docsDF.loc[doc,keyphrases[keyphrase_no]] = 1
-
-        #finalDF = df[['sentiment_score']].join(docsDF)
-        #print(finalDF.head(5))
-
-        vaderScores = []
-        for i in range(len(self.df)):
-            if int(self.df['sentiment_score'][i][0]) > 0:
-                vaderScores.append(1)
-            else:
-                vaderScores.append(0)
-
-        miScore = []
-        for keyphrase in keyphrases:
-            miScore.append([keyphrase] + [sklearn.metrics.mutual_info_score(vaderScores, docsDF[keyphrase].as_matrix())])
-        miDF = pandas.DataFrame(miScore)
-        miDF.columns = ['Keyphrase', 'MI']
-        miDF = miDF.sort_values(by="MI", axis=0, ascending=False)
-        print(miDF)
-
-        return miDF, self.df.join(docsDF)
-
-    def highlighter(self, keyphrase, text):
-        keyphrase.split
-
-
-
 
 class CustomFilter(Filter):
     # This filter will run for both the index and the query

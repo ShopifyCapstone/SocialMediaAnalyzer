@@ -3,17 +3,16 @@ from tkinter import *
 import tkinter.font as tkFont
 import tkinter.ttk as ttk
 from tkinter.ttk import Combobox,Treeview,Scrollbar
-from keyphrase_extractor import get_keyphrases
 import pandas
-import webbrowser
 
 
 ###Create Table
 class TableApp(Frame):
-    def __init__(self, parent, keyphraseDF=pandas.DataFrame({'Term' : []}),commentsDF=pandas.DataFrame({'a' : [1]})):
+    def __init__(self, parent, masterDF, keyphraseDF=pandas.DataFrame({'keyphrase_stemmed' : []})):
         Frame.__init__(self, parent)
+        # TODO: deal with default keyphraseDF
         self.loadTable(keyphraseDF)
-        self.commentsDF = commentsDF
+        self.masterDF = masterDF
         self.grid(sticky=(N, S, W, E))
         parent.grid_rowconfigure(0, weight=1)
         parent.grid_columnconfigure(0, weight=1)
@@ -23,25 +22,29 @@ class TableApp(Frame):
         # TODO: make reusable for various df's
         self.keyphraseDF = keyphraseDF
         tv = Treeview(self)
-        #tv['columns'] = ('pointwisemutual', 'mutual', 'viewfull')
-        tv.heading("#0", text='Key Phrase')
+        columns = list(self.keyphraseDF.columns[1:].values)
+        tv['columns'] = columns
+
+        tv.heading("#0", text='keyphrase_stemmed')
         tv.column("#0", anchor="w", width=300)
-        '''
-        tv.heading('pointwisemutual', text='PMI')
-        tv.column('pointwisemutual', anchor='center', width=50)
-        tv.heading('mutual', text='MI')
-        tv.column('mutual', anchor='center', width=50)
-        tv.heading('viewfull', text='See Full Thread')
-        tv.column('viewfull', anchor='center', width=100)
-        '''
+
+        for column in tv['columns']:
+            tv.heading(column, text=column)
+            tv.column(column, anchor='center', width=50)
+
+        #tv.heading('pointwisemutual', text='PMI')
+        #tv.column('pointwisemutual', anchor='center', width=50)
+
         tv.grid(sticky=(N, S, W, E))
         self.treeview = tv
         self.grid_rowconfigure(0, weight=1)
         self.grid_columnconfigure(0, weight=1)
 
         for (i, row) in self.keyphraseDF.iterrows():
-            self.treeview.insert('', 'end', text=row["Keyphrase"])
-            #self.treeview.insert('', 'end', text=row["body"], values=(row["name"], row["subreddit"], 'View'))
+            print(i)
+            #self.treeview.insert('', 'end', text=row["keyphrase_stemmed"])
+            self.treeview.insert('', 'end', text=row["keyphrase_stemmed"],
+                                 values=(row["frequency"], row["MI"], row["PMI_pos"], row["PMI_neg"]))
 
         self.treeview.bind("<Button-1>", self.onClick)
 
@@ -58,77 +61,18 @@ class TableApp(Frame):
         t_child.pack()
         print(keyphrase)
         t_child.delete(1.0, END)
-        for comment in self.commentsDF[self.commentsDF[keyphrase]==1]['body'].values.tolist():
+        for comment in self.masterDF[self.masterDF[keyphrase]==1]['body'].values.tolist():
             t_child.insert(END, comment + '\n-----------------\n')
         #call second window
-        #webbrowser.open(link)
-
-'''
-###Create Timeline Bar Graph
-class TimelineApp(Frame):
-    def __init__(self, parent):
-        Frame.__init__(self, parent)
-        self.CreateGraph()
-        self.grid(sticky=(N, S, W, E))
-        parent.grid_rowconfigure(0, weight=1)
-        parent.grid_columnconfigure(0, weight=1)
-
-    def CreateGraph(self):
-        timetable = pandas.DataFrame(columns=['month', 'total'], index=[0, 1, 2])
-        timetable.loc[0] = pandas.Series({'month': "Jan", 'total': 50})
-        timetable.loc[1] = pandas.Series({'month': "Feb", 'total': 35})
-        timetable.loc[2] = pandas.Series({'month': "Mar", 'total': 29})
-        timetable.loc[3] = pandas.Series({'month': "Apr", 'total': 15})
-        timetable.loc[4] = pandas.Series({'month': "May", 'total': 10})
-        timetable.loc[5] = pandas.Series({'month': "Jun", 'total': 47})
-        timetable.loc[6] = pandas.Series({'month': "Jul", 'total': 38})
-        timetable.loc[7] = pandas.Series({'month': "Aug", 'total': 7})
-        timetable.loc[8] = pandas.Series({'month': "Sep", 'total': 23})
-        timetable.loc[9] = pandas.Series({'month': "Oct", 'total': 19})
-        timetable.loc[10] = pandas.Series({'month': "Nov", 'total': 28})
-        timetable.loc[11] = pandas.Series({'month': "Dec", 'total': 33})
-
-        ###month = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
-
-        c_width = 55
-        c_height = 180
-        c = Canvas(self, width=c_width, height=c_height, bg='gray')
-        c.pack()
-
-        ###sizing the graph
-        ###y height = max value * y_stretch
-        y_height = timetable.total.max()
-        y_stretch = 140 / y_height
-        # gap between lower canvas edge and x axis
-        y_gap = 20
-        # stretch enough to get all data items in
-        x_stretch = 15
-        x_width = 28
-        # gap between left canvas edge and y axis
-        x_gap = 20
-
-        c.create_line(0, c_height - y_gap, 550, c_height - y_gap)
-
-        for i, row in timetable.iterrows():
-            # calculate reactangle coordinates (integers) for each bar
-            x0 = i * x_stretch + i * x_width + x_gap
-            y0 = c_height - (row["total"] * y_stretch + y_gap)
-            x1 = i * x_stretch + i * x_width + x_width + x_gap
-            y1 = c_height - y_gap
-            # draw the bar
-            c.create_rectangle(x0, y0, x1, y1, fill="midnightblue")
-            # put the y value above each bar
-            c.create_text(x1, y0, anchor=SE, text=row["total"])
-            c.create_text(x1, c_height - 2, anchor=SE, text=row["month"])
-            print(i)
-'''
 
 ###Main Application
 class App(tkinter.Tk):
     ###Initialize things
-    def __init__(self, whoosher):
+    def __init__(self, whoosher, extractor):
         tkinter.Tk.__init__(self)
         self.whoosher = whoosher
+        self.masterDF = self.whoosher.masterDF
+        self.extractor = extractor
         self.initialize()
 
     ###Actually initialize the program
@@ -139,16 +83,12 @@ class App(tkinter.Tk):
         secondframe = Frame(self, bg='gray', width=1000, height=100, padx=3, pady=3)
         thirdframe = Frame(self, bg='white', width=1000, height=100, padx=3, pady=3)
         self.fourthframe = Frame(self, bg='lavender', width=1000, height=100, padx=3, pady=3)
-        #fifthframe = Frame(self, bg='yellowgreen', width=1000, height=300, padx=3, pady=3)
-        #sixthframe = Frame(self, bg='gray', width=1000, height=300, padx=3, pady=3)
 
         ###layout all of the main containers
         firstframe.grid(row=0, sticky="ew")
         secondframe.grid(row=1, sticky="nsew")
         thirdframe.grid(row=3, sticky="ew")
         self.fourthframe.grid(row=4, sticky="ew")
-        #fifthframe.grid(row=5, sticky="ew")
-        #sixthframe.grid(row=6, sticky="ew")
 
         ###first frame = search box
         submit = Button(firstframe, text="Search", background="yellowgreen", command=self.OnButtonClick)
@@ -156,7 +96,7 @@ class App(tkinter.Tk):
         ###self.entryVariable is the search item
         self.entryVariable = tkinter.StringVar()
         self.entry = tkinter.Entry(firstframe, textvariable=self.entryVariable)
-        self.entry.bind("<Return>", self.OnPressEnter)
+        self.entry.bind("<Return>", self.OnButtonClick)
         self.entryVariable.set("")
 
         ###top frame layout
@@ -203,71 +143,47 @@ class App(tkinter.Tk):
 
         ###third frame = Keyphrases sorted by MI
         keyphraselabel = Label(thirdframe, text="Show keyphrases for")
-        #keyphrasesearch = Label(thirdframe, textvariable=self.entryVariable)
-        #keyphraseshow = Label(thirdframe, text="Show: ")
 
         choice = StringVar()
         choice.set("all")
         self.RB1 = Radiobutton(thirdframe, text="all", variable=choice, value="all", state="disabled")
         self.RB2 = Radiobutton(thirdframe, text="pos", variable=choice, value="pos", state="disabled")
         self.RB3 = Radiobutton(thirdframe, text="neg", variable=choice, value="neg", state="disabled")
-
-        #showallcomments = Button(thirdframe, text="Show All Comments", command=self.SecondWindow)
+        self.RB4 = Radiobutton(thirdframe, text="freq", variable=choice, value="freq", state="disabled")
 
         ###third frame layout
         keyphraselabel.grid(row=0, column=0)
-        #keyphrasesearch.grid(row=0, column=1)
-        #keyphraseshow.grid(row=0, column=3)
         self.RB1.grid(row=0, column=4)
         self.RB2.grid(row=0, column=5)
         self.RB3.grid(row=0, column=6)
-        #showallcomments.grid(row=0, column=7)
+        self.RB4.grid(row=0, column=7)
 
         ###fourthframe = Table
-        self.table = TableApp(self.fourthframe)
-
-        ###fifth frame = Timeline Header
-        #timelinehead = Label(fifthframe, text="Comment Frequency Timeline", bg="yellowgreen")
-
-        #timelinehead.grid(row=0, column=0)
-
-        ###sixth frame = Actual Timeline
-        #TimelineApp(sixthframe)
+        self.table = TableApp(self.fourthframe, masterDF=self.masterDF)
 
     ###Click Submit Button and show all search
-    def OnButtonClick(self):
-        print("OnButtonClick")
+    def OnButtonClick(self, event=None):
+        if event is not None:
+            print("Enter")
+        else:
+            print("Button")
+
         user_query = self.entryVariable.get()
-        search_results_df = self.whoosher.search_keywords(user_query)
-        print('# search_results_df', search_results_df)
-        keyphrases = get_keyphrases(". ".join(search_results_df["body"].tolist()))['Term'].tolist()
-        self.currentDF, self.totalDF = self.whoosher.get_MIs(keyphrases)
+        searchDF = self.whoosher.search(user_query)
+        print('# keyphraseDF', searchDF)
+        text = ". ".join(searchDF["body"])
+        keyphraseDF = self.extractor.get_keyphrases(textInput=text)
         self.RB1.configure(state="normal")
         self.RB2.configure(state="normal")
         self.RB3.configure(state="normal")
+        self.RB4.configure(state="normal")
         self.RB1.select()
         self.fourthframe.destroy()
         self.fourthframe = Frame(self, bg='lavender', width=1000, height=100, padx=3, pady=3)
         self.fourthframe.grid(row=4, sticky="ew")
-        TableApp(self.fourthframe, self.currentDF, self.totalDF)
+        TableApp(parent=self.fourthframe, keyphraseDF=keyphraseDF, masterDF=self.masterDF)
 
     ###summary statistics
-
-    ###Click Enter and show all search
-    def OnPressEnter(self, event):
-        # TODO: broken, to be fixed.
-        print("OnPressEnter")
-        user_query = self.entryVariable.get()
-        self.currentDF = self.whoosher.search_keywords(user_query)
-        print('# currentDF',self.currentDF)
-        self.RB1.configure(state="normal")
-        self.RB2.configure(state="normal")
-        self.RB3.configure(state="normal")
-        self.RB1.select()
-        self.fourthframe.destroy()
-        self.fourthframe = Frame(self, bg='lavender', width=1000, height=100, padx=3, pady=3)
-        self.fourthframe.grid(row=4, sticky="ew")
-        TableApp(self.fourthframe, self.currentDF)
 
     '''
     ###Create Second Window
@@ -289,3 +205,7 @@ class App(tkinter.Tk):
         ctr_left.grid(row=0, column=0, sticky="ns")
         ctr_right.grid(row=0, column=2, sticky="ns")
     '''
+
+    #####button
+    #####DF = DF.sort_values('Frequency', axis=0, ascending=False)
+    #####miDF = miDF.sort_values(by="MI", axis=0, ascending=False)
