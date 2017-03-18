@@ -55,4 +55,4 @@ def read_comments(pickle_name, dir='data/'):
     commentDF.to_pickle(pickle_name)
 
 if __name__ == "__main__":
-    read_comments(dir='data_old/', pickle_name='commentDF_old.pkl')
+    read_comments(dir='data/', pickle_name='commentDF.pkl')

@@ -104,7 +104,10 @@ class Extractor():
 
         keyphraseDF = pandas.DataFrame([[key, value] for key, value in counter.items() if value>=min_freq],
                                        columns=['keyphrase_stemmed', 'frequency'])
-        occurrenceDF = self.get_occurrence(keyphraseDF["keyphrase_stemmed"].tolist())
+        (docsDF, occurrenceDF) = self.get_occurrence(keyphraseDF)
+        print("docs", docsDF)
+        print("keys", keyphraseDF)
+        keyphraseDF = keyphraseDF.join(docsDF["docs"])
         print(occurrenceDF)
         keyphraseDF = keyphraseDF.join(self.get_MIs(occurrenceDF=occurrenceDF)["MI"])
         keyphraseDF = keyphraseDF.join(
@@ -115,21 +118,31 @@ class Extractor():
 
         return keyphraseDF
 
-    def get_occurrence(self, keyphrases):
+    def get_occurrence(self, keyphraseDF):
+
+        keyphrases = keyphraseDF["keyphrase_stemmed"].tolist()
+        no_keyphrases = len(keyphrases)
 
         occurrences = []
         for keyphrase in keyphrases:
-            occurrences.append(self.whoosher.search(user_query=keyphrase, phraseSearch=True, keyphraseSearch=True))
-        print(occurrences)
+            (docs, tempDF) = self.whoosher.search(user_query=keyphrase, phraseSearch=True)
+            occurrences.append(docs)
+        print("occurences: ", occurrences)
 
-        occurrenceDF = pandas.DataFrame(numpy.zeros(shape=(len(self.masterDF), len(keyphrases)), dtype=numpy.int8))
+        docsDF = keyphraseDF.copy()
+        docsDF.columns = ["keyphrase_stemmed", "docs"]
+        docsDF["docs"] = docsDF["docs"].astype(object)
+        for i in range(no_keyphrases):
+            docsDF.set_value(i, 'docs', occurrences[i])
+
+        occurrenceDF = pandas.DataFrame(numpy.zeros(shape=(len(self.masterDF), no_keyphrases), dtype=numpy.int8))
         occurrenceDF.columns = keyphrases
 
         for keyphrase_no in range(len(keyphrases)):
             for doc in occurrences[keyphrase_no]:
                 occurrenceDF.loc[doc, keyphrases[keyphrase_no]] = 1
 
-        return occurrenceDF.join(self.masterDF["sentiment_class"])
+        return (docsDF, occurrenceDF.join(self.masterDF["sentiment_class"]))
 
     def get_MIs(self, occurrenceDF):
 

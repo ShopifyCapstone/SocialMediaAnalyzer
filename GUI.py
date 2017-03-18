@@ -6,23 +6,58 @@ from tkinter.ttk import Combobox,Treeview,Scrollbar
 import pandas
 
 
+#df.ix[List]
+
 ###Create Table
 class TableApp(Frame):
-    def __init__(self, parent, masterDF, keyphraseDF=pandas.DataFrame({'keyphrase_stemmed' : []})):
+    def __init__(self, parent, masterDF, columns=[], secondWindowDF=pandas.DataFrame({'body' : []}),
+                 keyphraseDF=pandas.DataFrame({'keyphrase_stemmed' : []}), searchResults=set([]), secondWindow=False):
         Frame.__init__(self, parent)
         # TODO: deal with default keyphraseDF
-        self.loadTable(keyphraseDF)
         self.masterDF = masterDF
+        if secondWindow:
+            self.loadTableWindow2(secondWindowDF, columns)
+        else:
+            self.loadTable(keyphraseDF, columns, searchResults)
         self.grid(sticky=(N, S, W, E))
         parent.grid_rowconfigure(0, weight=1)
         parent.grid_columnconfigure(0, weight=1)
 
+    def loadTableWindow2(self, secondWindowDF, columns):
+        # TODO: make reusable for various df's
+        self.secondWindowDF = secondWindowDF
+        tv = Treeview(self)
+        #columns = list(self.keyphraseDF.columns[1:].values)
+        tv['columns'] = columns
+
+        tv.heading("#0", text='#')
+        tv.column("#0", anchor="w", width=300)
+
+        for column in tv['columns']:
+            tv.heading(column, text=column)
+            tv.column(column, anchor='center', width=100)
+
+        #tv.heading('pointwisemutual', text='PMI')
+        #tv.column('pointwisemutual', anchor='center', width=50)
+
+        tv.grid(sticky=(N, S, W, E))
+        self.treeview = tv
+        self.grid_rowconfigure(0, weight=1)
+        self.grid_columnconfigure(0, weight=1)
+
+        for (i, row) in self.secondWindowDF.iterrows():
+            self.treeview.insert('', 'end', text=i,
+                                 values=tuple(row[column] for column in columns))
+
+        self.treeview.bind("<Button-1>", self.onClick2)
+
     ###Get Table Values
-    def loadTable(self, keyphraseDF):
+    def loadTable(self, keyphraseDF, columns, searchResults):
         # TODO: make reusable for various df's
         self.keyphraseDF = keyphraseDF
+        self.searchResults = searchResults
         tv = Treeview(self)
-        columns = list(self.keyphraseDF.columns[1:].values)
+        #columns = list(self.keyphraseDF.columns[1:].values)
         tv['columns'] = columns
 
         tv.heading("#0", text='keyphrase_stemmed')
@@ -30,7 +65,7 @@ class TableApp(Frame):
 
         for column in tv['columns']:
             tv.heading(column, text=column)
-            tv.column(column, anchor='center', width=50)
+            tv.column(column, anchor='center', width=100)
 
         #tv.heading('pointwisemutual', text='PMI')
         #tv.column('pointwisemutual', anchor='center', width=50)
@@ -41,22 +76,68 @@ class TableApp(Frame):
         self.grid_columnconfigure(0, weight=1)
 
         for (i, row) in self.keyphraseDF.iterrows():
-            print(i)
-            #self.treeview.insert('', 'end', text=row["keyphrase_stemmed"])
             self.treeview.insert('', 'end', text=row["keyphrase_stemmed"],
-                                 values=(row["frequency"], row["MI"], row["PMI_pos"], row["PMI_neg"]))
+                                 values=tuple(row[column] for column in columns))
 
         self.treeview.bind("<Button-1>", self.onClick)
 
-
-    def onClick(self, event):
-        # change to the highlighted view
+    def onClick2(self, event):
         item = self.treeview.identify('item', event.x, event.y)
-        keyphrase = self.treeview.item(item, "text")
-        print("you clicked on", keyphrase)
-        #link = self.keyphraseDF[self.keyphraseDF['body'] == body]["link"].tolist()[0]
+        index = int(self.treeview.item(item, "text"))
+        link_id = self.secondWindowDF.iloc[index]["link_id"]
+        print("you clicked on", link_id)
 
         child = tkinter.Toplevel(self)
+        child.title("Window 3")
+        t_child = Text(child)
+        t_child.pack()
+        t_child.delete(1.0, END)
+        for comment in self.masterDF[self.masterDF["link_id"] == link_id]['body'].values.tolist():
+            t_child.insert(END, comment + '\n-----------------\n')
+
+    def onClick(self, event):
+        item = self.treeview.identify('item', event.x, event.y)
+        keyphrase = self.treeview.item(item, "text")
+        docs = self.keyphraseDF[self.keyphraseDF["keyphrase_stemmed"]==keyphrase]["docs"].values[0]
+        print("you clicked on", keyphrase)
+        print("searchResults: ", *self.searchResults)
+        print("docs: ", *docs)
+        intersection = list(docs & self.searchResults)
+        print("intersection: ", *intersection)
+        secondWindowDF = self.masterDF.iloc[intersection]
+        print(secondWindowDF)
+
+        child = tkinter.Toplevel(self)
+        child.title("Window 2")
+
+        windowfirst = Frame(child, bg='yellowgreen', width=1000, height=50, padx=3, pady=3)
+        windowsecond = Frame(child, bg='gray', width=1000, height=100, padx=3, pady=3)
+
+        windowfirst.pack()
+        windowsecond.pack()
+
+        TableApp(parent=windowsecond, columns=["body"],
+                 masterDF=self.masterDF, secondWindowDF=secondWindowDF.reset_index(drop=True), secondWindow=True)
+
+
+        '''
+    ###Create Second Window
+    def SecondWindow(self):
+        child = tkinter.Toplevel(self)
+        child.title("Comments")
+        ###Create the main container frames
+
+
+        ###layout all of the main containers
+
+
+        ##comment
+        ctr_left = Frame(windowsecond, bg='red', width=500, height=300, padx=3, pady=3)
+        ctr_right = Frame(windowsecond, bg='brown', width=500, height=300, padx=3, pady=3)
+
+        ctr_left.grid(row=0, column=0, sticky="ns")
+        ctr_right.grid(row=0, column=2, sticky="ns")
+    ######################################################
         t_child = Text(child)
         t_child.pack()
         print(keyphrase)
@@ -64,7 +145,7 @@ class TableApp(Frame):
         for comment in self.masterDF[self.masterDF[keyphrase]==1]['body'].values.tolist():
             t_child.insert(END, comment + '\n-----------------\n')
         #call second window
-
+        '''
 ###Main Application
 class App(tkinter.Tk):
     ###Initialize things
@@ -159,7 +240,7 @@ class App(tkinter.Tk):
         self.RB4.grid(row=0, column=7)
 
         ###fourthframe = Table
-        self.table = TableApp(self.fourthframe, masterDF=self.masterDF)
+        self.table = TableApp(self.fourthframe, masterDF=self.masterDF, columns=[])
 
     ###Click Submit Button and show all search
     def OnButtonClick(self, event=None):
@@ -169,10 +250,11 @@ class App(tkinter.Tk):
             print("Button")
 
         user_query = self.entryVariable.get()
-        searchDF = self.whoosher.search(user_query)
-        print('# keyphraseDF', searchDF)
+        (searchResults, searchDF) = self.whoosher.search(user_query)
         text = ". ".join(searchDF["body"])
         keyphraseDF = self.extractor.get_keyphrases(textInput=text)
+        print("############################")
+        print(keyphraseDF)
         self.RB1.configure(state="normal")
         self.RB2.configure(state="normal")
         self.RB3.configure(state="normal")
@@ -181,30 +263,12 @@ class App(tkinter.Tk):
         self.fourthframe.destroy()
         self.fourthframe = Frame(self, bg='lavender', width=1000, height=100, padx=3, pady=3)
         self.fourthframe.grid(row=4, sticky="ew")
-        TableApp(parent=self.fourthframe, keyphraseDF=keyphraseDF, masterDF=self.masterDF)
+        TableApp(parent=self.fourthframe, keyphraseDF=keyphraseDF,
+                 masterDF=self.masterDF, columns=["MI", "PMI_pos", "PMI_neg", "frequency"], searchResults=searchResults)
 
     ###summary statistics
 
-    '''
-    ###Create Second Window
-    def SecondWindow(self):
-        child = tkinter.Toplevel(self)
-        child.title("Comments")
-        ###Create the main container frames
-        windowfirst = Frame(child, bg='yellowgreen', width=1000, height=50, padx=3, pady=3)
-        windowsecond = Frame(child, bg='gray', width=1000, height=100, padx=3, pady=3)
 
-        ###layout all of the main containers
-        windowfirst.pack()
-        windowsecond.pack()
-
-        ##comment
-        ctr_left = Frame(windowsecond, bg='red', width=500, height=300, padx=3, pady=3)
-        ctr_right = Frame(windowsecond, bg='brown', width=500, height=300, padx=3, pady=3)
-
-        ctr_left.grid(row=0, column=0, sticky="ns")
-        ctr_right.grid(row=0, column=2, sticky="ns")
-    '''
 
     #####button
     #####DF = DF.sort_values('Frequency', axis=0, ascending=False)

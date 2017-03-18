@@ -7,8 +7,8 @@ from searcher import Whoosher
 
 
 # Point to Whoosh data or build it if required
-masterDF = pandas.read_pickle('commentDF_old.pkl') #for testing
-whoosher = Whoosher(path="index_old/")
+masterDF = pandas.read_pickle('commentDF.pkl').head(15000) #for testing
+whoosher = Whoosher(path="index/")
 success = whoosher.open_index()
 if success == False:
 	whoosher.create_index(masterDF.columns)

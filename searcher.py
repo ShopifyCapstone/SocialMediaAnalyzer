@@ -72,7 +72,7 @@ class Whoosher:
             docs.append(doc)
         self.masterDF = pandas.DataFrame.from_dict(docs)
 
-    def search(self, user_query, ranking_function=scoring.BM25F(), phraseSearch=False, keyphraseSearch=False):
+    def search(self, user_query, ranking_function=scoring.BM25F(), phraseSearch=False):
         qp = QueryParser("body", schema=self.ix.schema)
 
         # Once you have a QueryParser object, you can call parse() on it to parse a query string into a query object:
@@ -100,26 +100,8 @@ class Whoosher:
             print("Number of scored and sorted docs in this Results object:", matches.scored_length())
             results = [item.fields() for item in matches]
 
-        if keyphraseSearch == True:
-            return matches.docs()
-        else:
-            resultsDF = pandas.DataFrame.from_dict(results)
-            return resultsDF
-
-    def search_keyphrase(self, keyphrase, ranking_function=scoring.BM25F()):
-        # TODO: address the df situation (potentially introduce a self.field)
-        # TODO: potentially do all qp statements at initiation???
-        qp = QueryParser("body", schema=self.ix.schema)
-        qp.add_plugin(qparser.GtLtPlugin)
-        qp.add_plugin(qparser.PhrasePlugin)
-        query = qp.parse('"' + keyphrase + '"')
-        print("# Keyphrase", keyphrase, ", Query: ", query)
-        print(query)
-        with self.ix.searcher(weighting=ranking_function) as searcher:
-            matches = searcher.search(query, limit=None)
-            #results = [item.fields() for item in matches]
-            docs = matches.docs()
-        return docs
+        resultsDF = pandas.DataFrame.from_dict(results)
+        return (matches.docs(), resultsDF)
 
 class CustomFilter(Filter):
     # This filter will run for both the index and the query
@@ -148,7 +130,7 @@ if __name__ == "__main__":
     whoosher = Whoosher("index_test")
     whoosher.create_index(masterDF.columns)
     whoosher.fill_index(masterDF)
-    resultsDF = whoosher.search_keywords(user_query='capital')
+    resultsDF = whoosher.search(user_query='capital')
     print('# resultsDF', resultsDF)
     for table in whoosher.get_MIs(keyphrases=['bad', 'good'], df=masterDF):
         print(table)
@@ -156,5 +138,5 @@ if __name__ == "__main__":
     # search existing index
     other_whoosher = Whoosher("index_test")
     other_whoosher.open_index()
-    resultsDF = other_whoosher.search_keywords(user_query='capital')
+    resultsDF = other_whoosher.search(user_query='capital')
     print('# resultsDF', resultsDF)
