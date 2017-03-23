@@ -30,7 +30,7 @@ def add_sentiment(df):
     df['sentiment_score'] = scores
     df['sentiment_class'] = sentiments
 
-def read_comments(pickle_name, dir='data/'):
+def read_comments(pickle_name, pickle=False, dir='Data/comments/'):
 
     print('read_comments')
     files = os.listdir(dir)
@@ -51,8 +51,41 @@ def read_comments(pickle_name, dir='data/'):
 
     add_sentiment(commentDF)
 
-    #return commentDF
-    commentDF.to_pickle(pickle_name)
+    if pickle==True:
+        commentDF.to_pickle(pickle_name)
+
+    return commentDF
+
+def read_submissions(pickle_name, pickle=False, dir='Data/submissions/'):
+
+    print('read_submissions')
+    files = os.listdir(dir)
+    size = len(files)
+
+    submissionDF = read_json_as_pandas(dir+files[0])
+    print(files[0])
+    for i in range(1,size,1):
+        file = files[i]
+        print(file)
+        tempDF = read_json_as_pandas(dir+file)
+        submissionDF = pandas.concat([submissionDF, tempDF], ignore_index=True)
+
+    add_t3 = lambda id: "t3_" + id
+    submissionDF["name"] = submissionDF["id"].apply(add_t3)
+    submissionDF["body"] = submissionDF["title"] +  "\n" + submissionDF["selftext"]
+    submissionDF["link_id"] = submissionDF["name"]
+    submissionDF["parent_id"] = "N/A"
+
+    selected_columns = ['author','body','created_utc','link_id','name','parent_id','score','subreddit']
+    submissionDF = pandas.DataFrame(submissionDF, columns=selected_columns)
+
+    add_sentiment(submissionDF)
+
+    if pickle==True:
+        submissionDF.to_pickle(pickle_name)
+
+    return submissionDF
 
 if __name__ == "__main__":
-    read_comments(dir='data/', pickle_name='commentDF.pkl')
+    #read_comments(dir='Data/comments/', pickle=True, pickle_name='commentDF.pkl')
+    read_submissions(dir='Data/submissions/', pickle=True, pickle_name='submissionDF.pkl')

@@ -7,6 +7,7 @@ import numpy
 import sklearn
 from collections import Counter
 import math
+import re
 nltk.download('punkt')
 nltk.download("wordnet")
 nltk.download("brown")
@@ -109,6 +110,7 @@ class Extractor():
         print("keys", keyphraseDF)
         keyphraseDF = keyphraseDF.join(docsDF["docs"])
         print(occurrenceDF)
+        keyphraseDF = keyphraseDF.join(self.get_fullphrases(keyphraseDF=keyphraseDF)["keyphrase_full"])
         keyphraseDF = keyphraseDF.join(self.get_MIs(occurrenceDF=occurrenceDF)["MI"])
         keyphraseDF = keyphraseDF.join(
             self.get_PMIs(occurrenceDF=occurrenceDF, metric="sentiment_class", value="positive")["PMI_pos"])
@@ -162,6 +164,22 @@ class Extractor():
 
         return miDF
 
+    def get_fullphrases(self, keyphraseDF):
+
+        keyphrases = []
+
+        for keyphrase_stemmed in keyphraseDF['keyphrase_stemmed']:
+
+            index = list(keyphraseDF[keyphraseDF['keyphrase_stemmed']==keyphrase_stemmed]['docs'].values.tolist()[0])[0]
+            text = self.masterDF.iloc[index]["body"]
+            keyphrase_full = get_fullphrase(keyphrase_stemmed, text)
+            keyphrases.append([keyphrase_stemmed, keyphrase_full])
+        fullDF = pandas.DataFrame(keyphrases)
+        fullDF.columns = ['keyphrase_stemmed', 'keyphrase_full']
+        print(fullDF)
+
+        return fullDF
+
 
     def get_PMIs(self, occurrenceDF, metric, value):
 
@@ -183,3 +201,19 @@ class Extractor():
         pmiDF = pandas.DataFrame({'keyphrase_stemmed': keyphrases, 'PMI_'+value[:3]: pmis})
 
         return pmiDF
+
+
+def get_fullphrase(keyphrase_stemmed, text):
+    print(keyphrase_stemmed)
+    parts = keyphrase_stemmed.lower().split(" ")
+
+    search_term = parts[0][:3] + "[a-zA-Z]*"
+    for i in range(1, len(parts)):
+        search_term = search_term + " " + parts[i][:3] + "[a-zA-Z]*"
+
+    print(search_term, "in", text)
+    search_result = re.search(search_term, text.lower())
+    keyphrase_full = search_result.group(0)
+    print(keyphrase_full)
+
+    return keyphrase_full

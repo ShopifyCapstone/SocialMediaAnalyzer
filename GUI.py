@@ -6,39 +6,38 @@ from tkinter.ttk import Combobox,Treeview,Scrollbar
 import pandas
 
 
-#df.ix[List]
-
-###Create Table
+# TODO: clean up this entire class once the overall architecture is more or less finalized
 class TableApp(Frame):
-    def __init__(self, parent, masterDF, columns=[], secondWindowDF=pandas.DataFrame({'body' : []}),
-                 keyphraseDF=pandas.DataFrame({'keyphrase_stemmed' : []}), searchResults=set([]), secondWindow=False):
+    def __init__(self, parent, masterDF, window, clicked_keyphrase="", columns=[], secondWindowDF=pandas.DataFrame({'body' : []}),
+                 keyphraseDF=pandas.DataFrame({'keyphrase_stemmed' : []}), searchResults=set([])):
         Frame.__init__(self, parent)
-        # TODO: deal with default keyphraseDF
         self.masterDF = masterDF
-        if secondWindow:
-            self.loadTableWindow2(secondWindowDF, columns)
+        if window=="second":
+            self.loadTableWindow2(secondWindowDF, columns, clicked_keyphrase)
+        elif window=="third":
+            self.loadTableWindow3(keyphraseDF, columns, searchResults)
         else:
             self.loadTable(keyphraseDF, columns, searchResults)
         self.grid(sticky=(N, S, W, E))
         parent.grid_rowconfigure(0, weight=1)
         parent.grid_columnconfigure(0, weight=1)
 
-    def loadTableWindow2(self, secondWindowDF, columns):
+    def loadTableWindow3(self):
+        #TODO: !!!
+        print("empty")
+
+    def loadTableWindow2(self, secondWindowDF, columns, clicked_keyphrase):
         # TODO: make reusable for various df's
         self.secondWindowDF = secondWindowDF
         tv = Treeview(self)
-        #columns = list(self.keyphraseDF.columns[1:].values)
-        tv['columns'] = columns
+        #tv['columns'] = columns
 
         tv.heading("#0", text='#')
-        tv.column("#0", anchor="w", width=300)
+        tv.column("#0", anchor="w", width=600)
 
-        for column in tv['columns']:
-            tv.heading(column, text=column)
-            tv.column(column, anchor='center', width=100)
-
-        #tv.heading('pointwisemutual', text='PMI')
-        #tv.column('pointwisemutual', anchor='center', width=50)
+        #for column in tv['columns']:
+        #    tv.heading(column, text=column)
+        #    tv.column(column, anchor='center', width=350)
 
         tv.grid(sticky=(N, S, W, E))
         self.treeview = tv
@@ -46,29 +45,40 @@ class TableApp(Frame):
         self.grid_columnconfigure(0, weight=1)
 
         for (i, row) in self.secondWindowDF.iterrows():
-            self.treeview.insert('', 'end', text=i,
-                                 values=tuple(row[column] for column in columns))
+            #print(clicked_keyphrase)
+            #print(row["body"])
+            highlighted_text = highlight(keyphrase=clicked_keyphrase, text=row['body'], words=5)
+            self.treeview.insert('', 'end', text=str(i) + " " + highlighted_text)
 
-        self.treeview.bind("<Button-1>", self.onClick2)
+        self.treeview.bind("<Double-1>", self.onClick2)
 
-    ###Get Table Values
+    def treeview_sort_column(self, tv, col, reverse):
+        l = [(tv.set(k, col), k) for k in tv.get_children('')]
+        print("l",l)
+        l.sort(reverse=reverse)
+
+        # rearrange items in sorted positions
+        for index, (val, k) in enumerate(l):
+            print("index",index,"val",val,"k",k)
+            tv.move(k, '', index)
+
+        # reverse sort next time
+        tv.heading(col, command=lambda: \
+            self.treeview_sort_column(tv, col, not reverse))
+
     def loadTable(self, keyphraseDF, columns, searchResults):
         # TODO: make reusable for various df's
         self.keyphraseDF = keyphraseDF
         self.searchResults = searchResults
         tv = Treeview(self)
-        #columns = list(self.keyphraseDF.columns[1:].values)
         tv['columns'] = columns
 
-        tv.heading("#0", text='keyphrase_stemmed')
+        tv.heading("#0", text='keyphrase_full')
         tv.column("#0", anchor="w", width=300)
 
         for column in tv['columns']:
-            tv.heading(column, text=column)
+            tv.heading(column, text=column, command=lambda _col=column: self.treeview_sort_column(tv, _col, True))
             tv.column(column, anchor='center', width=100)
-
-        #tv.heading('pointwisemutual', text='PMI')
-        #tv.column('pointwisemutual', anchor='center', width=50)
 
         tv.grid(sticky=(N, S, W, E))
         self.treeview = tv
@@ -76,14 +86,23 @@ class TableApp(Frame):
         self.grid_columnconfigure(0, weight=1)
 
         for (i, row) in self.keyphraseDF.iterrows():
-            self.treeview.insert('', 'end', text=row["keyphrase_stemmed"],
+            self.treeview.insert('', 'end', text=row["keyphrase_full"],
                                  values=tuple(row[column] for column in columns))
 
-        self.treeview.bind("<Button-1>", self.onClick)
+        self.treeview.bind("<Double-1>", self.onClick)
+
+        self.treeview.bind("<Enter>", self.onEnter)
+        #self.treeview.bind("<Leave>", self.onLeave)
+
+    def onEnter(self, event):
+        region = self.treeview.identify('region', event.x, event.y)
+        if region == "heading":
+            print("double_click")
 
     def onClick2(self, event):
         item = self.treeview.identify('item', event.x, event.y)
-        index = int(self.treeview.item(item, "text"))
+        string = self.treeview.item(item, "text")
+        index = int(string.split(" ")[0])
         link_id = self.secondWindowDF.iloc[index]["link_id"]
         print("you clicked on", link_id)
 
@@ -92,14 +111,24 @@ class TableApp(Frame):
         t_child = Text(child)
         t_child.pack()
         t_child.delete(1.0, END)
-        for comment in self.masterDF[self.masterDF["link_id"] == link_id]['body'].values.tolist():
-            t_child.insert(END, comment + '\n-----------------\n')
+        thirdWindowDF = self.masterDF[self.masterDF["link_id"] == link_id].sort_values(by='created_utc')
+        for (index,row) in thirdWindowDF.iterrows():
+            author = row['author']
+            body = row['body']
+            time = row['created_utc']
+            text = "on " + str(time) + author + " wrote:\n" + body
+            t_child.insert(END, text + '\n-----------------\n')
 
     def onClick(self, event):
         item = self.treeview.identify('item', event.x, event.y)
-        keyphrase = self.treeview.item(item, "text")
-        docs = self.keyphraseDF[self.keyphraseDF["keyphrase_stemmed"]==keyphrase]["docs"].values[0]
-        print("you clicked on", keyphrase)
+        region = self.treeview.identify('region', event.x, event.y)
+        if region == "heading":
+            print("clicked heading")
+            return
+        keyphrase_full = self.treeview.item(item, "text")
+        keyphrase_stemmed = self.keyphraseDF[self.keyphraseDF["keyphrase_full"]==keyphrase_full]["keyphrase_stemmed"].values[0]
+        docs = self.keyphraseDF[self.keyphraseDF["keyphrase_full"]==keyphrase_full]["docs"].values[0]
+        print("you clicked on", keyphrase_full)
         print("searchResults: ", *self.searchResults)
         print("docs: ", *docs)
         intersection = list(docs & self.searchResults)
@@ -116,36 +145,9 @@ class TableApp(Frame):
         windowfirst.pack()
         windowsecond.pack()
 
-        TableApp(parent=windowsecond, columns=["body"],
-                 masterDF=self.masterDF, secondWindowDF=secondWindowDF.reset_index(drop=True), secondWindow=True)
+        TableApp(window="second", parent=windowsecond, columns=["body"], clicked_keyphrase=keyphrase_stemmed,
+                 masterDF=self.masterDF, secondWindowDF=secondWindowDF.reset_index(drop=True))
 
-
-        '''
-    ###Create Second Window
-    def SecondWindow(self):
-        child = tkinter.Toplevel(self)
-        child.title("Comments")
-        ###Create the main container frames
-
-
-        ###layout all of the main containers
-
-
-        ##comment
-        ctr_left = Frame(windowsecond, bg='red', width=500, height=300, padx=3, pady=3)
-        ctr_right = Frame(windowsecond, bg='brown', width=500, height=300, padx=3, pady=3)
-
-        ctr_left.grid(row=0, column=0, sticky="ns")
-        ctr_right.grid(row=0, column=2, sticky="ns")
-    ######################################################
-        t_child = Text(child)
-        t_child.pack()
-        print(keyphrase)
-        t_child.delete(1.0, END)
-        for comment in self.masterDF[self.masterDF[keyphrase]==1]['body'].values.tolist():
-            t_child.insert(END, comment + '\n-----------------\n')
-        #call second window
-        '''
 ###Main Application
 class App(tkinter.Tk):
     ###Initialize things
@@ -162,13 +164,13 @@ class App(tkinter.Tk):
         ###Create the main container frames
         firstframe = Frame(self, bg='yellowgreen', width=1000, height=50, padx=3, pady=3)
         secondframe = Frame(self, bg='gray', width=1000, height=100, padx=3, pady=3)
-        thirdframe = Frame(self, bg='white', width=1000, height=100, padx=3, pady=3)
+        #thirdframe = Frame(self, bg='white', width=1000, height=100, padx=3, pady=3)
         self.fourthframe = Frame(self, bg='lavender', width=1000, height=100, padx=3, pady=3)
 
         ###layout all of the main containers
         firstframe.grid(row=0, sticky="ew")
         secondframe.grid(row=1, sticky="nsew")
-        thirdframe.grid(row=3, sticky="ew")
+        #thirdframe.grid(row=3, sticky="ew")
         self.fourthframe.grid(row=4, sticky="ew")
 
         ###first frame = search box
@@ -185,47 +187,50 @@ class App(tkinter.Tk):
         self.entry.grid(row=0, column=0, sticky='EW')
 
         ###second frame = summary stats
-        statslabel1 = Label(secondframe, text="Total Comments", bg="gray")
-        statslabel2 = Label(secondframe, text="Total Subreddits", bg="gray")
-        statslabel3 = Label(secondframe, text="Total Positive", bg="gray", fg="darkgreen")
-        statslabel4 = Label(secondframe, text="Total Neutral", bg="gray", fg="yellow")
-        statslabel5 = Label(secondframe, text="Total Negative", bg="gray", fg="red")
+        commentsTotalLabel = Label(secondframe, text="Comments, total:", bg="gray")
+        subredditsLabel = Label(secondframe, text="Subreddits:", bg="gray")
+        commentsPositiveLabel = Label(secondframe, text="+ive comments:", bg="gray", fg="darkgreen")
+        commentsNegativeLabel = Label(secondframe, text="-ive mentions:", bg="gray", fg="red")
+        linksLabel = Label(secondframe, text="Threads:", bg="gray")
 
-        self.statResult1 = tkinter.StringVar()
-        self.statResult2 = tkinter.StringVar()
-        self.statResult3 = tkinter.StringVar()
-        self.statResult4 = tkinter.StringVar()
-        self.statResult5 = tkinter.StringVar()
+        self.commentsTotalVar = tkinter.StringVar()
+        self.subredditsVar = tkinter.StringVar()
+        self.commentsPositiveVar = tkinter.StringVar()
+        self.commentsNegativeVar = tkinter.StringVar()
+        self.linksVar = tkinter.StringVar()
 
-        self.statResult1.set(u"0")
-        self.statResult2.set(u"0")
-        self.statResult3.set(u"0")
-        self.statResult4.set(u"0")
-        self.statResult5.set(u"0")
+        self.commentsTotalVar.set("0")
+        self.subredditsVar.set("0")
+        self.commentsPositiveVar.set("0")
+        self.commentsNegativeVar.set("0")
+        self.linksVar.set("0")
 
-        resultlabel1 = Label(secondframe, textvariable=self.statResult1, bg="gray")
-        resultlabel2 = Label(secondframe, textvariable=self.statResult2, bg="gray")
-        resultlabel3 = Label(secondframe, textvariable=self.statResult3, bg="gray")
-        resultlabel4 = Label(secondframe, textvariable=self.statResult4, bg="gray")
-        resultlabel5 = Label(secondframe, textvariable=self.statResult5, bg="gray")
+        commentsTotal = Label(secondframe, textvariable=self.commentsTotalVar, bg="gray")
+        subreddits = Label(secondframe, textvariable=self.subredditsVar, bg="gray")
+        commentsPositive = Label(secondframe, textvariable=self.commentsPositiveVar, bg="gray")
+        commentsNegative = Label(secondframe, textvariable=self.commentsNegativeVar, bg="gray")
+        links = Label(secondframe, textvariable=self.linksVar, bg="gray")
 
         ###second frame layout
-        statslabel1.grid(row=0, column=0)
-        statslabel2.grid(row=0, column=2)
-        statslabel3.grid(row=1, column=0, sticky="w")
-        statslabel4.grid(row=1, column=2)
-        statslabel5.grid(row=1, column=4)
+        subredditsLabel.grid(row=0, column=0)
+        linksLabel.grid(row=0, column=2)
 
-        resultlabel1.grid(row=0, column=1)
-        resultlabel2.grid(row=0, column=3)
-        resultlabel3.grid(row=1, column=1)
-        resultlabel4.grid(row=1, column=3)
-        resultlabel5.grid(row=1, column=5)
+        commentsTotalLabel.grid(row=1, column=0)
+        commentsPositiveLabel.grid(row=1, column=2, sticky="w")
+        commentsNegativeLabel.grid(row=1, column=4)
 
+        subreddits.grid(row=0, column=1)
+        links.grid(row=0, column=3)
+
+        commentsTotal.grid(row=1, column=1)
+        commentsPositive.grid(row=1, column=3)
+        commentsNegative.grid(row=1, column=5)
+
+        '''
         ###third frame = Keyphrases sorted by MI
         keyphraselabel = Label(thirdframe, text="Show keyphrases for")
 
-        choice = StringVar()
+        #choice = StringVar()
         choice.set("all")
         self.RB1 = Radiobutton(thirdframe, text="all", variable=choice, value="all", state="disabled")
         self.RB2 = Radiobutton(thirdframe, text="pos", variable=choice, value="pos", state="disabled")
@@ -238,9 +243,10 @@ class App(tkinter.Tk):
         self.RB2.grid(row=0, column=5)
         self.RB3.grid(row=0, column=6)
         self.RB4.grid(row=0, column=7)
+        '''
 
         ###fourthframe = Table
-        self.table = TableApp(self.fourthframe, masterDF=self.masterDF, columns=[])
+        self.table = TableApp(self.fourthframe, window="first", masterDF=self.masterDF, columns=[])
 
     ###Click Submit Button and show all search
     def OnButtonClick(self, event=None):
@@ -252,24 +258,55 @@ class App(tkinter.Tk):
         user_query = self.entryVariable.get()
         (searchResults, searchDF) = self.whoosher.search(user_query)
         text = ". ".join(searchDF["body"])
+        comments_total = len(searchDF)
+        self.commentsTotalVar.set(comments_total)
+        comments_positive = len(searchDF[searchDF['sentiment_class'] == 'positive'])
+        share_positive = comments_positive/comments_total
+        self.commentsPositiveVar.set(str(comments_positive) + " (" + str(share_positive) + ")")
+        self.commentsNegativeVar.set(str(comments_total - comments_positive)  + " (" + str(1-share_positive) + ")")
+        self.subredditsVar.set(len(searchDF['subreddit'].unique()))
+        self.linksVar.set(len(searchDF['link_id'].unique()))
+        #print("comments_total", self.commentsTotalVar.value())
+        #print("comments_positive", self.commentsPositiveVar.value())
         keyphraseDF = self.extractor.get_keyphrases(textInput=text)
         print("############################")
         print(keyphraseDF)
-        self.RB1.configure(state="normal")
-        self.RB2.configure(state="normal")
-        self.RB3.configure(state="normal")
-        self.RB4.configure(state="normal")
-        self.RB1.select()
+        #self.RB1.configure(state="normal")
+        #self.RB2.configure(state="normal")
+        #self.RB3.configure(state="normal")
+        #self.RB4.configure(state="normal")
+        #self.RB1.select()
         self.fourthframe.destroy()
         self.fourthframe = Frame(self, bg='lavender', width=1000, height=100, padx=3, pady=3)
         self.fourthframe.grid(row=4, sticky="ew")
-        TableApp(parent=self.fourthframe, keyphraseDF=keyphraseDF,
+        TableApp(parent=self.fourthframe, keyphraseDF=keyphraseDF, window="first",
                  masterDF=self.masterDF, columns=["MI", "PMI_pos", "PMI_neg", "frequency"], searchResults=searchResults)
 
     ###summary statistics
 
+    ###button
+    ###DF = DF.sort_values('Frequency', axis=0, ascending=False)
+    ###miDF = miDF.sort_values(by="MI", axis=0, ascending=False)
 
 
-    #####button
-    #####DF = DF.sort_values('Frequency', axis=0, ascending=False)
-    #####miDF = miDF.sort_values(by="MI", axis=0, ascending=False)
+def highlight(keyphrase, text, words=5):
+
+    parts = keyphrase.lower().split(" ")
+    search_term = parts[0][:3] + "[a-zA-Z]*"
+    for i in range(1, len(parts)):
+        search_term = search_term + " " + parts[i][:3] + "[a-zA-Z]*"
+
+    print(search_term)
+
+    search_result = re.search(search_term, text.lower())
+    left = search_result.start()
+    right = search_result.end()
+
+    print(left, right)
+
+    highlighted_text = "..." + " ".join(text[:left].split(" ")[-words-1:]) + text[left:right].upper() + " ".join(
+        text[right:].split(" ")[:words+1]) + "..."
+
+    print(highlighted_text)
+
+    return highlighted_text
