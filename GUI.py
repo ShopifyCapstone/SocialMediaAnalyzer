@@ -8,6 +8,7 @@ import pandas
 import webbrowser
 
 
+
 ###Create Table
 class TableApp(Frame):
     def __init__(self, parent, keyphraseDF=pandas.DataFrame({'Term' : []}),commentsDF=pandas.DataFrame({'a' : [1]})):
