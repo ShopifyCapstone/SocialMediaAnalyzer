@@ -7,7 +7,7 @@ from keyphrase_extractor import get_keyphrases
 import pandas
 import webbrowser
 
-
+ 
 
 ###Create Table
 class TableApp(Frame):
